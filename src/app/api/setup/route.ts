@@ -65,6 +65,17 @@ export async function POST(request: NextRequest) {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_schedules (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        check_in_interval_hours INTEGER NOT NULL DEFAULT 24,
+        grace_period_minutes INTEGER NOT NULL DEFAULT 60,
+        alert_enabled BOOLEAN DEFAULT true,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+
     // Create default admin if none exists
     const existing = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
     if (existing.length === 0) {

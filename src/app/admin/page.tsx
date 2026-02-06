@@ -38,7 +38,18 @@ interface AlertLog {
   contact_email: string;
 }
 
-type Tab = "checkins" | "admin_logins" | "alerts" | "contacts" | "users";
+interface UserSchedule {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  check_in_interval_hours: number;
+  grace_period_minutes: number;
+  alert_enabled: boolean;
+  last_checkin: string | null;
+  last_health_tag: string | null;
+}
+
+type Tab = "checkins" | "admin_logins" | "alerts" | "contacts" | "users" | "schedules";
 
 const HEALTH_TAG_STYLES: Record<string, string> = {
   okay: "bg-green-100 text-green-800",
@@ -57,6 +68,9 @@ export default function AdminDashboard() {
   const [alerts, setAlerts] = useState<AlertLog[]>([]);
   const [contacts, setContacts] = useState<Record<string, unknown>[]>([]);
   const [users, setUsers] = useState<Record<string, unknown>[]>([]);
+  const [schedules, setSchedules] = useState<UserSchedule[]>([]);
+  const [editingSchedule, setEditingSchedule] = useState<number | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({ hours: 24, grace: 60, enabled: true });
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -97,6 +111,7 @@ export default function AdminDashboard() {
     // Also fetch contacts and users
     fetch("/api/contacts").then(r => r.json()).then(d => setContacts(d.contacts || [])).catch(() => {});
     fetch("/api/users").then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {});
+    fetch("/api/admin/schedules").then(r => r.json()).then(d => setSchedules(d.schedules || [])).catch(() => {});
   }, [admin, fetchLogs]);
 
   async function handleLogout() {
@@ -118,6 +133,7 @@ export default function AdminDashboard() {
     { key: "alerts", label: "Alerts Sent", count: alerts.length },
     { key: "contacts", label: "Contacts", count: contacts.length },
     { key: "users", label: "Users", count: users.length },
+    { key: "schedules", label: "Schedules", count: schedules.length },
   ];
 
   return (
@@ -336,6 +352,160 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-stone-500">{new Date(String(u.created_at)).toLocaleDateString()}</td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {tab === "schedules" && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 border-b border-stone-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">User</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Check-in Every</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Grace Period</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Alerts</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Last Check-in</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Status</th>
+                    <th className="text-left px-4 py-3 text-stone-500 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedules.length === 0 ? (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">No users with schedules</td></tr>
+                  ) : schedules.map((s) => {
+                    const isEditing = editingSchedule === s.user_id;
+                    const isOverdue = s.last_checkin
+                      ? (Date.now() - new Date(s.last_checkin).getTime()) > (s.check_in_interval_hours * 3600000 + s.grace_period_minutes * 60000)
+                      : false;
+
+                    function formatInterval(hours: number) {
+                      if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""}`;
+                      const days = hours / 24;
+                      if (days === Math.floor(days)) return `${days} day${days > 1 ? "s" : ""}`;
+                      return `${hours} hours`;
+                    }
+
+                    return (
+                      <tr key={s.user_id} className="border-b border-stone-50 hover:bg-stone-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-stone-700">{s.user_name}</p>
+                          <p className="text-stone-400 text-xs">{s.user_email || ""}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={720}
+                                value={scheduleForm.hours}
+                                onChange={(e) => setScheduleForm(f => ({ ...f, hours: Number(e.target.value) }))}
+                                className="w-20 px-2 py-1 border rounded text-sm"
+                              />
+                              <span className="text-xs text-stone-400">hrs</span>
+                            </div>
+                          ) : (
+                            <span className="text-stone-700">{formatInterval(s.check_in_interval_hours)}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={scheduleForm.grace}
+                                onChange={(e) => setScheduleForm(f => ({ ...f, grace: Number(e.target.value) }))}
+                                className="px-2 py-1 border rounded text-sm"
+                              >
+                                <option value={15}>15 min</option>
+                                <option value={30}>30 min</option>
+                                <option value={60}>1 hour</option>
+                                <option value={120}>2 hours</option>
+                                <option value={240}>4 hours</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="text-stone-500">{s.grace_period_minutes} min</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={scheduleForm.enabled}
+                                onChange={(e) => setScheduleForm(f => ({ ...f, enabled: e.target.checked }))}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-xs">Enabled</span>
+                            </label>
+                          ) : (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${s.alert_enabled ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-500"}`}>
+                              {s.alert_enabled ? "ON" : "OFF"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-stone-500 text-xs">
+                          {s.last_checkin ? new Date(s.last_checkin).toLocaleString() : "Never"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.last_checkin ? (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${isOverdue ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                              {isOverdue ? "OVERDUE" : "OK"}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-500">No data</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={async () => {
+                                  await fetch("/api/admin/schedules", {
+                                    method: "PUT",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      userId: s.user_id,
+                                      checkInIntervalHours: scheduleForm.hours,
+                                      gracePeriodMinutes: scheduleForm.grace,
+                                      alertEnabled: scheduleForm.enabled,
+                                    }),
+                                  });
+                                  setEditingSchedule(null);
+                                  fetch("/api/admin/schedules").then(r => r.json()).then(d => setSchedules(d.schedules || []));
+                                }}
+                                className="px-3 py-1.5 bg-[#5B8A72] text-white text-xs rounded-lg font-medium cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingSchedule(null)}
+                                className="px-3 py-1.5 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingSchedule(s.user_id);
+                                setScheduleForm({
+                                  hours: s.check_in_interval_hours,
+                                  grace: s.grace_period_minutes,
+                                  enabled: s.alert_enabled,
+                                });
+                              }}
+                              className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs rounded-lg font-medium cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
