@@ -22,12 +22,28 @@ export default function Onboarding() {
     setStep(1);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
 
+    // Register user in DB
+    let dbUserId: string | undefined;
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        dbUserId = String(data.user.id);
+      }
+    } catch {
+      // Continue with local-only if DB fails
+    }
+
     setUser({
-      id: generateId(),
+      id: dbUserId || generateId(),
       name: name.trim(),
       email: email.trim(),
       setupComplete: true,

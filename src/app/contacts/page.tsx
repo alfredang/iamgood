@@ -82,16 +82,32 @@ export default function Contacts() {
   function handleSaveNew(c: EmergencyContact) {
     addContact(c);
     setAdding(false);
+    // Persist to DB
+    if (user?.id) {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: Number(user.id), name: c.name, email: c.email, phone: c.phone, relationship: c.relationship }),
+      }).catch(() => {});
+    }
   }
 
   function handleSaveEdit(c: EmergencyContact) {
     updateContact(c);
     setEditing(null);
+    // Persist to DB
+    fetch("/api/contacts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(c.id), name: c.name, email: c.email, phone: c.phone, relationship: c.relationship }),
+    }).catch(() => {});
   }
 
   function handleDelete(id: string) {
     removeContact(id);
     setConfirmDelete(null);
+    // Delete from DB
+    fetch(`/api/contacts?id=${id}`, { method: "DELETE" }).catch(() => {});
   }
 
   return (

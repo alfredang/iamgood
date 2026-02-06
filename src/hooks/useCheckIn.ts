@@ -7,7 +7,7 @@ import { addCheckIn, generateId } from "@/lib/store";
 import { HealthTag } from "@/lib/types";
 
 export function useCheckIn() {
-  const { schedule, checkIns } = useStore();
+  const { schedule, checkIns, user } = useStore();
   const lastCheckIn = checkIns[0] || null;
 
   const [status, setStatus] = useState<CheckInStatus>("good");
@@ -21,12 +21,13 @@ export function useCheckIn() {
       setTimeRemaining(formatTimeRemaining(ms));
     }
     update();
-    const interval = setInterval(update, 30000); // update every 30s
+    const interval = setInterval(update, 30000);
     return () => clearInterval(interval);
   }, [schedule, lastCheckIn]);
 
   const performCheckIn = useCallback(
     (healthTag: HealthTag = "okay") => {
+      // Save locally
       addCheckIn({
         id: generateId(),
         timestamp: new Date().toISOString(),
@@ -34,8 +35,17 @@ export function useCheckIn() {
       });
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
+
+      // Also persist to DB
+      if (user?.id) {
+        fetch("/api/checkins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: Number(user.id), healthTag }),
+        }).catch(() => {});
+      }
     },
-    []
+    [user]
   );
 
   return {
