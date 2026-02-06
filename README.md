@@ -9,6 +9,8 @@ A quiet safety companion for people living alone. Simple, one-tap check-ins that
 
 **[Live Demo →](https://iamgood-psi.vercel.app)**
 
+![SafeCheck Screenshot](screenshot.png)
+
 ---
 
 ## Overview
